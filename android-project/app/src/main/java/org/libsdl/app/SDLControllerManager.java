@@ -188,6 +188,13 @@ class SDLJoystickHandler_API16 extends SDLJoystickHandler {
                 SDLJoystick joystick = getJoystick(device_id);
                 if (joystick == null) {
                     InputDevice joystickDevice = InputDevice.getDevice(device_id);
+                    // DPads in joystick and arrows in keyboard get mixed up in stk, so we ignore any device name contains "keyboard"
+                    // qwerty2 is found in android emulator
+                    if (joystickDevice.getName().contains("Keyboard") ||
+                        joystickDevice.getName().contains("keyboard") ||
+                        joystickDevice.getName() == "qwerty2")
+                        continue;
+
                     joystick = new SDLJoystick();
                     joystick.device_id = device_id;
                     joystick.name = joystickDevice.getName();
