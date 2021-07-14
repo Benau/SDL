@@ -78,6 +78,7 @@
 @property (nonatomic, assign, getter=isKeyboardVisible) BOOL keyboardVisible;
 @property (nonatomic, assign) SDL_Rect textInputRect;
 @property (nonatomic, assign) int keyboardHeight;
+@property (nonatomic, assign) int movedHeightByKeyboard;
 #endif
 
 @end
@@ -88,5 +89,6 @@ void UIKit_ShowScreenKeyboard(_THIS, SDL_Window *window);
 void UIKit_HideScreenKeyboard(_THIS, SDL_Window *window);
 SDL_bool UIKit_IsScreenKeyboardShown(_THIS, SDL_Window *window);
 int UIKit_GetScreenKeyboardHeight(_THIS, SDL_Window *window);
+int UIKit_GetMovedHeightByScreenKeyboard(_THIS, SDL_Window *window);
 void UIKit_SetTextInputRect(_THIS, SDL_Rect *rect);
 #endif

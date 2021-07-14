@@ -270,6 +270,7 @@ SDL_HideHomeIndicatorHintChanged(void *userdata, const char *name, const char *o
 @synthesize textInputRect;
 @synthesize keyboardHeight;
 @synthesize keyboardVisible;
+@synthesize movedHeightByKeyboard;
 
 /* Set ourselves up as a UITextFieldDelegate */
 - (void)initKeyboard
@@ -293,6 +294,7 @@ SDL_HideHomeIndicatorHintChanged(void *userdata, const char *name, const char *o
     textField.hidden = YES;
     keyboardVisible = NO;
     keyboardHeight = 0;
+    movedHeightByKeyboard = 0;
 
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 #if !TARGET_OS_TV
@@ -394,6 +396,7 @@ SDL_HideHomeIndicatorHintChanged(void *userdata, const char *name, const char *o
 - (void)hideKeyboard
 {
     keyboardVisible = NO;
+    movedHeightByKeyboard = 0;
     [textField resignFirstResponder];
 }
 
@@ -470,11 +473,13 @@ SDL_HideHomeIndicatorHintChanged(void *userdata, const char *name, const char *o
     CGPoint offset = CGPointMake(0.0, 0.0);
     CGRect frame = UIKit_ComputeViewFrame(window, self.view.window.screen);
 
+    self.movedHeightByKeyboard = 0;
     if (self.keyboardHeight) {
         int rectbottom = self.textInputRect.y + self.textInputRect.h;
         int keybottom = self.view.bounds.size.height - self.keyboardHeight;
         if (keybottom < rectbottom) {
             offset.y = keybottom - rectbottom;
+            self.movedHeightByKeyboard = -offset.y;
         }
     }
 
@@ -591,6 +596,18 @@ UIKit_GetScreenKeyboardHeight(_THIS, SDL_Window *window)
         SDL_uikitviewcontroller *vc = GetWindowViewController(window);
         if (vc != nil) {
             return vc.keyboardHeight;
+        }
+        return 0;
+    }
+}
+
+int
+UIKit_GetMovedHeightByScreenKeyboard(_THIS, SDL_Window *window)
+{
+    @autoreleasepool {
+        SDL_uikitviewcontroller *vc = GetWindowViewController(window);
+        if (vc != nil) {
+            return vc.movedHeightByKeyboard;
         }
         return 0;
     }
