@@ -47,6 +47,9 @@ static void IME_Quit(SDL_VideoData *videodata);
 #define MAPVK_VK_TO_CHAR    2
 #endif
 
+// Windows use caret to handle ime language chooser positioning
+HWND windows_hwnd;
+
 /* Alphabetic scancodes for PC keyboards */
 void
 WIN_InitKeyboard(_THIS)
@@ -192,6 +195,7 @@ WIN_StartTextInput(_THIS)
 {
 #ifndef SDL_DISABLE_WINDOWS_IME
     SDL_Window *window;
+    SDL_VideoData *videodata;
 #endif
 
     WIN_ResetDeadKeys();
@@ -200,7 +204,10 @@ WIN_StartTextInput(_THIS)
     window = SDL_GetKeyboardFocus();
     if (window) {
         HWND hwnd = ((SDL_WindowData *) window->driverdata)->hwnd;
-        SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+        windows_hwnd = hwnd;
+        videodata = (SDL_VideoData *)_this->driverdata;
+        CreateCaret(windows_hwnd, NULL, 1, videodata->ime_rect.h);
+        HideCaret(windows_hwnd);
         SDL_GetWindowSize(window, &videodata->ime_winwidth, &videodata->ime_winheight);
         IME_Init(videodata, hwnd);
         IME_Enable(videodata, hwnd);
@@ -213,6 +220,7 @@ WIN_StopTextInput(_THIS)
 {
 #ifndef SDL_DISABLE_WINDOWS_IME
     SDL_Window *window;
+    SDL_VideoData *videodata;
 #endif
 
     WIN_ResetDeadKeys();
@@ -221,7 +229,12 @@ WIN_StopTextInput(_THIS)
     window = SDL_GetKeyboardFocus();
     if (window) {
         HWND hwnd = ((SDL_WindowData *) window->driverdata)->hwnd;
-        SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
+        if (windows_hwnd)
+        {
+            DestroyCaret();
+            windows_hwnd = NULL;
+        }
+        videodata = (SDL_VideoData *)_this->driverdata;
         IME_Init(videodata, hwnd);
         IME_Disable(videodata, hwnd);
     }
@@ -229,28 +242,51 @@ WIN_StopTextInput(_THIS)
 }
 
 void
+WIN_UpdateCandidateRect(SDL_VideoData *videodata, HIMC himc)
+{
+    CANDIDATEFORM cf;
+    if (!himc)
+        return;
+
+    cf.dwIndex = 0;
+    cf.dwStyle = CFS_EXCLUDE;
+    cf.ptCurrentPos.x = videodata->ime_rect.x;
+    cf.ptCurrentPos.y = videodata->ime_rect.y;
+    cf.rcArea.left = videodata->ime_rect.x;
+    cf.rcArea.top = videodata->ime_rect.y;
+    cf.rcArea.right = videodata->ime_rect.x + videodata->ime_rect.w;
+    cf.rcArea.bottom = videodata->ime_rect.y + videodata->ime_rect.h;
+    ImmSetCandidateWindow(himc, &cf);
+}
+
+
+void
+WIN_UpdateCompositionRect(SDL_VideoData *videodata, HIMC himc)
+{
+    COMPOSITIONFORM compf;
+    if (!himc)
+        return;
+
+    compf.dwStyle = CFS_RECT;
+    compf.ptCurrentPos.x = videodata->ime_rect.x;
+    compf.ptCurrentPos.y = videodata->ime_rect.y;
+    compf.rcArea.left = videodata->ime_rect.x;
+    compf.rcArea.top = videodata->ime_rect.y;
+    compf.rcArea.right = videodata->ime_rect.x + videodata->ime_rect.w;
+    compf.rcArea.bottom = videodata->ime_rect.y + videodata->ime_rect.h;
+    ImmSetCompositionWindow(himc, &compf);
+}
+
+void
 WIN_SetTextInputRect(_THIS, SDL_Rect *rect)
 {
     SDL_VideoData *videodata = (SDL_VideoData *)_this->driverdata;
-    HIMC himc = 0;
-
     if (!rect) {
         SDL_InvalidParamError("rect");
         return;
     }
 
     videodata->ime_rect = *rect;
-
-    himc = ImmGetContext(videodata->ime_hwnd_current);
-    if (himc)
-    {
-        COMPOSITIONFORM cf;
-        cf.ptCurrentPos.x = videodata->ime_rect.x;
-        cf.ptCurrentPos.y = videodata->ime_rect.y;
-        cf.dwStyle = CFS_FORCE_POSITION;
-        ImmSetCompositionWindow(himc, &cf);
-        ImmReleaseContext(videodata->ime_hwnd_current, himc);
-    }
 }
 
 #ifdef SDL_DISABLE_WINDOWS_IME
@@ -370,7 +406,8 @@ IME_Init(SDL_VideoData *videodata, HWND hwnd)
     videodata->ime_available = SDL_TRUE;
     IME_UpdateInputLocale(videodata);
     IME_SetupAPI(videodata);
-    videodata->ime_uiless = UILess_SetupSinks(videodata);
+    // FIXME: the implementation of UILess IME is incomplete so we disable it by commenting this out:
+    //videodata->ime_uiless = UILess_SetupSinks(videodata);
     IME_UpdateInputLocale(videodata);
     IME_Disable(videodata, hwnd);
 }
@@ -874,20 +911,31 @@ IME_HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM *lParam, SDL_VideoD
     if (!videodata->ime_initialized || !videodata->ime_available || !videodata->ime_enabled)
         return SDL_FALSE;
 
+    if (windows_hwnd)
+        SetCaretPos(videodata->ime_rect.x, videodata->ime_rect.y);
+
     switch (msg) {
     case WM_INPUTLANGCHANGE:
         IME_InputLangChanged(videodata);
+        himc = ImmGetContext(hwnd);
+        WIN_UpdateCandidateRect(videodata, himc);
+        ImmReleaseContext(hwnd, himc);
         break;
     case WM_IME_SETCONTEXT:
-        *lParam = 0;
+        // application wants to draw composition text by itself.
+        *lParam &= ~(ISC_SHOWUICOMPOSITIONWINDOW);
         break;
     case WM_IME_STARTCOMPOSITION:
+        himc = ImmGetContext(hwnd);
+        WIN_UpdateCompositionRect(videodata, himc);
+        ImmReleaseContext(hwnd, himc);
         trap = SDL_TRUE;
         break;
     case WM_IME_COMPOSITION:
         trap = SDL_TRUE;
         himc = ImmGetContext(hwnd);
         if (*lParam & GCS_RESULTSTR) {
+            WIN_UpdateCompositionRect(videodata, himc);
             IME_GetCompositionString(videodata, himc, GCS_RESULTSTR);
             IME_SendInputEvent(videodata);
         }
@@ -913,22 +961,8 @@ IME_HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM *lParam, SDL_VideoD
             IME_UpdateInputLocale(videodata);
             break;
         case IMN_OPENCANDIDATE:
-        case IMN_CHANGECANDIDATE:
-            if (videodata->ime_uiless)
-                break;
-
-            trap = SDL_TRUE;
-            IME_ShowCandidateList(videodata);
-            himc = ImmGetContext(hwnd);
-            if (!himc)
-                break;
-
-            IME_GetCandidateList(himc, videodata);
-            ImmReleaseContext(hwnd, himc);
-            break;
         case IMN_CLOSECANDIDATE:
-            trap = SDL_TRUE;
-            IME_HideCandidateList(videodata);
+        case IMN_CHANGECANDIDATE:
             break;
         case IMN_PRIVATE:
             {
