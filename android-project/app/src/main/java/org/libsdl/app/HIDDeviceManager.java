@@ -106,6 +106,7 @@ public class HIDDeviceManager {
         mContext = context;
 
         // Make sure we have the HIDAPI library loaded with the native functions
+        /*
         try {
             SDL.loadLibrary("hidapi");
         } catch (Throwable e) {
@@ -134,7 +135,8 @@ public class HIDDeviceManager {
 
             return;
         }
-        
+        */
+
         HIDDeviceRegisterCallback();
 
         mSharedPreferences = mContext.getSharedPreferences("hidapi", Context.MODE_PRIVATE);
