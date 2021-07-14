@@ -208,6 +208,21 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         mCurrentNativeState = NativeState.INIT;
     }
 
+    // STK addition
+    public static void moveView(int height)
+    {
+        mSurface.setTranslationY(height);
+    }
+
+    public static void reFocusAfterSTKEditText()
+    {
+        mSurface.setFocusable(true);
+        mSurface.setFocusableInTouchMode(true);
+        mSurface.requestFocus();
+        mSurface.setOnKeyListener(mSurface);
+        mSurface.setOnTouchListener(mSurface);
+    }
+
     // Setup
     @Override
     protected void onCreate(Bundle savedInstanceState) {
