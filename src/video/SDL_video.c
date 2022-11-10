@@ -4360,6 +4360,16 @@ SDL_HasScreenKeyboardSupport(void)
     return SDL_FALSE;
 }
 
+int
+SDL_GetScreenKeyboardHeight(void)
+{
+    SDL_Window* window = SDL_GetFocusWindow();
+    if (_this && _this->GetScreenKeyboardHeight && window) {
+        return _this->GetScreenKeyboardHeight(_this, window);
+    }
+    return 0;
+}
+
 SDL_bool
 SDL_IsScreenKeyboardShown(SDL_Window *window)
 {
